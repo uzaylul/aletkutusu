@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık</title>
+    <title>Çoklu Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık + Karıştır</title>
     <style>
         body {
             background: #1e1e2f;
@@ -20,7 +20,7 @@
             padding: 24px;
             border-radius: 24px;
             box-shadow: 0 20px 30px rgba(0,0,0,0.5);
-            max-width: 1200px;
+            max-width: 1300px;
             width: fit-content;
         }
         h1 {
@@ -32,7 +32,7 @@
         .control-panel {
             display: flex;
             flex-wrap: wrap;
-            gap: 20px 25px;
+            gap: 16px 20px;
             align-items: center;
             margin-bottom: 20px;
             background: #3a3a55;
@@ -50,18 +50,21 @@
         input[type="file"] {
             display: none;
         }
-        .slider-container, .color-container {
+        .slider-container, .select-container, .color-container {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             flex-wrap: wrap;
+            background: #2a2a40;
+            padding: 8px 16px;
+            border-radius: 40px;
         }
-        .slider-container label, .color-container label {
+        .slider-container label, .select-container label, .color-container label {
             font-weight: 600;
             color: #c4c4ff;
         }
         input[type="range"] {
-            width: 160px;
+            width: 130px;
             cursor: pointer;
             background: #5656a0;
             height: 6px;
@@ -70,15 +73,25 @@
         }
         .value-badge {
             background: #1e1e2f;
-            padding: 6px 16px;
+            padding: 4px 12px;
             border-radius: 40px;
             font-weight: 600;
-            min-width: 70px;
+            min-width: 60px;
             text-align: center;
+            font-size: 0.9rem;
+        }
+        select {
+            background: #1e1e2f;
+            color: white;
+            border: 2px solid #8a8aff;
+            border-radius: 40px;
+            padding: 6px 16px;
+            font-weight: 600;
+            cursor: pointer;
         }
         input[type="color"] {
-            width: 60px;
-            height: 40px;
+            width: 50px;
+            height: 35px;
             border: 2px solid #8a8aff;
             border-radius: 12px;
             background: transparent;
@@ -116,16 +129,23 @@
             background: #5555cc;
             transform: scale(1.02);
         }
+        .file-info {
+            background: #2a2a40;
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            color: #b4b4ff;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🎚️ Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık</h1>
+    <h1>🖼️ Çoklu Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık + Karıştır</h1>
 
     <div class="control-panel">
         <label class="file-input">
-            📁 Fotoğraf Seç
-            <input type="file" id="fileInput" accept="image/*">
+            📁 Fotoğrafları Seç (birden fazla)
+            <input type="file" id="fileInput" accept="image/*" multiple>
         </label>
 
         <div class="slider-container">
@@ -135,9 +155,9 @@
         </div>
 
         <div class="slider-container">
-            <label>📐 Boşluk (px):</label>
+            <label>📐 Boşluk:</label>
             <input type="range" id="gapSlider" min="0" max="100" value="0" step="1">
-            <span class="value-badge" id="gapDisplay">0 px</span>
+            <span class="value-badge" id="gapDisplay">0px</span>
         </div>
 
         <div class="slider-container">
@@ -146,10 +166,20 @@
             <span class="value-badge" id="opacityDisplay">1.00</span>
         </div>
 
+        <div class="select-container">
+            <label>🔀 Karıştırma modu:</label>
+            <select id="mixMode">
+                <option value="sequential">Sıralı</option>
+                <option value="random">Rastgele</option>
+            </select>
+        </div>
+
         <div class="color-container">
             <label>🎨 Arka plan:</label>
             <input type="color" id="bgColor" value="#000000">
         </div>
+
+        <div class="file-info" id="fileCount">0 resim yüklü</div>
     </div>
 
     <canvas id="canvas" width="1920" height="1080"></canvas>
@@ -174,98 +204,156 @@
     const gapDisplay = document.getElementById('gapDisplay');
     const opacitySlider = document.getElementById('opacitySlider');
     const opacityDisplay = document.getElementById('opacityDisplay');
+    const mixModeSelect = document.getElementById('mixMode');
     const bgColorInput = document.getElementById('bgColor');
     const tileCountSpan = document.getElementById('tileCount');
+    const fileCountSpan = document.getElementById('fileCount');
 
-    let originalImage = null;
+    let images = []; // yüklenen resimler (Image nesneleri)
+    let imagesLoaded = false;
 
-    // --- Değer göstergeleri ---
-    scaleSlider.addEventListener('input', () => {
+    // --- Değer göstergeleri ve yeniden çizim ---
+    function updateAll() {
         scaleDisplay.textContent = parseFloat(scaleSlider.value).toFixed(2) + 'x';
-        if (originalImage) drawTiles();
-    });
-    gapSlider.addEventListener('input', () => {
-        gapDisplay.textContent = gapSlider.value + ' px';
-        if (originalImage) drawTiles();
-    });
-    opacitySlider.addEventListener('input', () => {
+        gapDisplay.textContent = gapSlider.value + 'px';
         opacityDisplay.textContent = parseFloat(opacitySlider.value).toFixed(2);
-        if (originalImage) drawTiles();
+        if (images.length > 0) drawTiles();
+    }
+
+    scaleSlider.addEventListener('input', updateAll);
+    gapSlider.addEventListener('input', updateAll);
+    opacitySlider.addEventListener('input', updateAll);
+    mixModeSelect.addEventListener('change', () => {
+        if (images.length > 0) drawTiles();
     });
     bgColorInput.addEventListener('input', () => {
-        if (originalImage) drawTiles();
+        if (images.length > 0) drawTiles();
     });
 
-    // --- Resim yükleme ---
+    // --- Resim yükleme (birden çok) ---
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const files = Array.from(e.target.files);
+        if (files.length === 0) {
+            images = [];
+            fileCountSpan.textContent = '0 resim yüklü';
+            drawTiles(); // tuvali temizle (resim yoksa)
+            return;
+        }
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                originalImage = img;
-                // İsteğe bağlı: varsayılan değerler
-                scaleSlider.value = '1.0';
-                scaleDisplay.textContent = '1.00x';
-                gapSlider.value = '0';
-                gapDisplay.textContent = '0 px';
-                opacitySlider.value = '1';
-                opacityDisplay.textContent = '1.00';
-                bgColorInput.value = '#000000';
-                drawTiles();
+        fileCountSpan.textContent = `${files.length} resim yükleniyor...`;
+
+        let loadedCount = 0;
+        const loadedImages = [];
+
+        files.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    loadedImages[index] = img;
+                    loadedCount++;
+                    if (loadedCount === files.length) {
+                        // Tüm resimler yüklendi
+                        images = loadedImages.filter(img => img !== undefined);
+                        fileCountSpan.textContent = `${images.length} resim yüklü`;
+                        // Varsayılan değerlere sıfırla (isteğe bağlı)
+                        scaleSlider.value = '1.0';
+                        gapSlider.value = '0';
+                        opacitySlider.value = '1';
+                        bgColorInput.value = '#000000';
+                        mixModeSelect.value = 'sequential';
+                        updateAll();
+                    }
+                };
+                img.src = event.target.result;
             };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        });
     });
 
-    // --- Döşeme çizici (şeffaflık desteği eklendi) ---
+    // --- Döşeme çizici (çoklu resim desteği) ---
     function drawTiles() {
-        if (!originalImage) return;
+        // Resim yoksa tuvali temizle ve çık
+        if (images.length === 0) {
+            ctx.fillStyle = bgColorInput.value;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            tileCountSpan.textContent = '🧩 Döşeme: 0 x 0';
+            return;
+        }
 
         const scale = parseFloat(scaleSlider.value);
         const gap = parseInt(gapSlider.value, 10);
         const opacity = parseFloat(opacitySlider.value);
         const bgColor = bgColorInput.value;
+        const mixMode = mixModeSelect.value; // 'sequential' veya 'random'
 
-        const tileW = originalImage.width * scale;
-        const tileH = originalImage.height * scale;
+        // Tüm resimler aynı boyutta mı? Farklı boyutlar olabilir.
+        // Döşeme boyutlarını ilk resmin boyutuna göre belirleyelim (veya hepsini ayrı ayrı mı? Kullanıcı muhtemelen aynı boyutta logolar yükler).
+        // Daha esnek: Her resmin orijinal boyutunu koruyarak scale uygula. Ama farklı boyutlar karışık görünebilir.
+        // Biz her resmi kendi boyutunda scale ile ölçekleyip döşeyeceğiz. Bu durumda döşeme hücreleri farklı boyutlarda olur, bu da düzeni bozar.
+        // Daha mantıklı: Tüm resimleri aynı boyuta (örneğin ilk yüklenen resmin boyutuna) ölçekleyelim mi? Ama kullanıcı farklı boyutları karıştırmak isteyebilir.
+        // Karar: Döşeme hücre boyutunu ilk resmin boyutuna göre sabitleyelim, diğer resimleri o hücreye sığdırmak için oranlarını bozmadan scale uygulayalım? Bu çok karmaşık.
+        // Pratik çözüm: Tüm resimleri aynı boyut kabul edip (hepsinin aynı en-boy oranına sahip olduğunu varsayarak) ilk resmin boyutlarını kullanalım. Eğer farklı boyutlar yüklenirse, bazı resimler kırpılabilir veya boşluklar oluşabilir. Ama bu kullanıcının sorumluluğu.
+        // Basitlik için ilk resmin genişlik ve yüksekliğini baz alalım.
+
+        const baseImg = images[0];
+        const baseW = baseImg.width;
+        const baseH = baseImg.height;
+
+        const tileW = baseW * scale;
+        const tileH = baseH * scale;
         const stepX = tileW + gap;
         const stepY = tileH + gap;
 
+        // Kaç sütun/satır çizileceğini hesapla (taşanlar dahil)
         const cols = Math.ceil((canvas.width - tileW) / stepX) + 1;
         const rows = Math.ceil((canvas.height - tileH) / stepY) + 1;
 
         tileCountSpan.textContent = `🧩 Döşeme: ${cols} x ${rows}`;
 
-        // Arka planı opak şekilde çiz (şeffaflıktan etkilenmemeli)
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Arka planı temizle
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Resimleri istenen şeffaflıkla çiz
         ctx.save();
         ctx.globalAlpha = opacity;
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
 
+        // Döşeme döngüsü
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 const x = c * stepX;
                 const y = r * stepY;
-                ctx.drawImage(originalImage, x, y, tileW, tileH);
+
+                // Hangi resmin kullanılacağını belirle
+                let imgIndex;
+                if (mixMode === 'sequential') {
+                    // Sıralı: (r * cols + c) % images.length
+                    imgIndex = (r * cols + c) % images.length;
+                } else {
+                    // Rastgele: her hücre için rastgele bir index
+                    imgIndex = Math.floor(Math.random() * images.length);
+                }
+                const img = images[imgIndex];
+
+                // Resmi çiz (farklı boyutları varsa, baseW/baseH yerine img.width/img.height kullanarak scale uygula)
+                // Eğer her resim farklı boyuttaysa, aynı scale değeriyle çizildiğinde hücreden taşabilir.
+                // Bu durumu düzeltmek için resmi hücre boyutuna sığdırmak isteyebiliriz. Ama bu efektin parçası olabilir.
+                // Şimdilik her resmi kendi orijinal boyutunda scale ile çizelim.
+                const w = img.width * scale;
+                const h = img.height * scale;
+                ctx.drawImage(img, x, y, w, h);
             }
         }
 
-        ctx.restore(); // globalAlpha'yı geri yükle (ileride başka çizimler için)
+        ctx.restore();
     }
 
     // --- PNG olarak kaydet ---
     document.getElementById('downloadBtn').addEventListener('click', () => {
-        if (!originalImage) {
-            alert('Önce bir fotoğraf yükleyin!');
+        if (images.length === 0) {
+            alert('Önce en az bir fotoğraf yükleyin!');
             return;
         }
         const link = document.createElement('a');
