@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık</title>
+    <style>
+        body {
+            background: #1e1e2f;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+        }
+        .container {
+            background: #2d2d44;
+            padding: 24px;
+            border-radius: 24px;
+            box-shadow: 0 20px 30px rgba(0,0,0,0.5);
+            max-width: 1200px;
+            width: fit-content;
+        }
+        h1 {
+            margin-top: 0;
+            font-weight: 400;
+            font-size: 1.8rem;
+            color: #b4b4ff;
+        }
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px 25px;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #3a3a55;
+            padding: 20px 25px;
+            border-radius: 50px;
+        }
+        .file-input {
+            background: #5656a0;
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .slider-container, .color-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .slider-container label, .color-container label {
+            font-weight: 600;
+            color: #c4c4ff;
+        }
+        input[type="range"] {
+            width: 160px;
+            cursor: pointer;
+            background: #5656a0;
+            height: 6px;
+            border-radius: 10px;
+            accent-color: #8a8aff;
+        }
+        .value-badge {
+            background: #1e1e2f;
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-weight: 600;
+            min-width: 70px;
+            text-align: center;
+        }
+        input[type="color"] {
+            width: 60px;
+            height: 40px;
+            border: 2px solid #8a8aff;
+            border-radius: 12px;
+            background: transparent;
+            cursor: pointer;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px black;
+            background: #222;
+            border: 2px solid #5a5a8a;
+        }
+        .info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 16px;
+            font-size: 1.1rem;
+            color: #bbbbff;
+        }
+        button {
+            background: #6d6df0;
+            border: none;
+            color: white;
+            font-weight: bold;
+            padding: 12px 32px;
+            border-radius: 60px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid #a3a3ff;
+        }
+        button:hover {
+            background: #5555cc;
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎚️ Döşeme + Yakınlık + Boşluk + Renk + Şeffaflık</h1>
+
+    <div class="control-panel">
+        <label class="file-input">
+            📁 Fotoğraf Seç
+            <input type="file" id="fileInput" accept="image/*">
+        </label>
+
+        <div class="slider-container">
+            <label>🔍 Yakınlık:</label>
+            <input type="range" id="scaleSlider" min="0.1" max="3.0" value="1.0" step="0.01">
+            <span class="value-badge" id="scaleDisplay">1.00x</span>
+        </div>
+
+        <div class="slider-container">
+            <label>📐 Boşluk (px):</label>
+            <input type="range" id="gapSlider" min="0" max="100" value="0" step="1">
+            <span class="value-badge" id="gapDisplay">0 px</span>
+        </div>
+
+        <div class="slider-container">
+            <label>💧 Şeffaflık:</label>
+            <input type="range" id="opacitySlider" min="0" max="1" value="1" step="0.01">
+            <span class="value-badge" id="opacityDisplay">1.00</span>
+        </div>
+
+        <div class="color-container">
+            <label>🎨 Arka plan:</label>
+            <input type="color" id="bgColor" value="#000000">
+        </div>
+    </div>
+
+    <canvas id="canvas" width="1920" height="1080"></canvas>
+
+    <div class="info">
+        <span>📐 Tuval: 1920x1080</span>
+        <span id="tileCount">🧩 Döşeme: 0 x 0</span>
+    </div>
+
+    <div style="display: flex; justify-content: center; margin-top: 24px;">
+        <button id="downloadBtn">💾 PNG Olarak Kaydet</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const fileInput = document.getElementById('fileInput');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const scaleDisplay = document.getElementById('scaleDisplay');
+    const gapSlider = document.getElementById('gapSlider');
+    const gapDisplay = document.getElementById('gapDisplay');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityDisplay = document.getElementById('opacityDisplay');
+    const bgColorInput = document.getElementById('bgColor');
+    const tileCountSpan = document.getElementById('tileCount');
+
+    let originalImage = null;
+
+    // --- Değer göstergeleri ---
+    scaleSlider.addEventListener('input', () => {
+        scaleDisplay.textContent = parseFloat(scaleSlider.value).toFixed(2) + 'x';
+        if (originalImage) drawTiles();
+    });
+    gapSlider.addEventListener('input', () => {
+        gapDisplay.textContent = gapSlider.value + ' px';
+        if (originalImage) drawTiles();
+    });
+    opacitySlider.addEventListener('input', () => {
+        opacityDisplay.textContent = parseFloat(opacitySlider.value).toFixed(2);
+        if (originalImage) drawTiles();
+    });
+    bgColorInput.addEventListener('input', () => {
+        if (originalImage) drawTiles();
+    });
+
+    // --- Resim yükleme ---
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                originalImage = img;
+                // İsteğe bağlı: varsayılan değerler
+                scaleSlider.value = '1.0';
+                scaleDisplay.textContent = '1.00x';
+                gapSlider.value = '0';
+                gapDisplay.textContent = '0 px';
+                opacitySlider.value = '1';
+                opacityDisplay.textContent = '1.00';
+                bgColorInput.value = '#000000';
+                drawTiles();
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // --- Döşeme çizici (şeffaflık desteği eklendi) ---
+    function drawTiles() {
+        if (!originalImage) return;
+
+        const scale = parseFloat(scaleSlider.value);
+        const gap = parseInt(gapSlider.value, 10);
+        const opacity = parseFloat(opacitySlider.value);
+        const bgColor = bgColorInput.value;
+
+        const tileW = originalImage.width * scale;
+        const tileH = originalImage.height * scale;
+        const stepX = tileW + gap;
+        const stepY = tileH + gap;
+
+        const cols = Math.ceil((canvas.width - tileW) / stepX) + 1;
+        const rows = Math.ceil((canvas.height - tileH) / stepY) + 1;
+
+        tileCountSpan.textContent = `🧩 Döşeme: ${cols} x ${rows}`;
+
+        // Arka planı opak şekilde çiz (şeffaflıktan etkilenmemeli)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Resimleri istenen şeffaflıkla çiz
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const x = c * stepX;
+                const y = r * stepY;
+                ctx.drawImage(originalImage, x, y, tileW, tileH);
+            }
+        }
+
+        ctx.restore(); // globalAlpha'yı geri yükle (ileride başka çizimler için)
+    }
+
+    // --- PNG olarak kaydet ---
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+        if (!originalImage) {
+            alert('Önce bir fotoğraf yükleyin!');
+            return;
+        }
+        const link = document.createElement('a');
+        link.download = 'doseme-1920x1080.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+</script>
+</body>
+</html>
